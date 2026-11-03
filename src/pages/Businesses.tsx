@@ -59,6 +59,7 @@ export function Businesses() {
     return list.sort(cmp[sort] ?? cmp.name);
   }, [businesses, q, type, stage, status, contact, sort, ownerById]);
 
+  const ruledOutCount = businesses.filter((b) => b.ruled_out).length;
   const allSelected = filtered.length > 0 && filtered.every((b) => selected.has(b.id));
   const toggle = (id: string) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const selectedList = filtered.filter((b) => selected.has(b.id));
@@ -93,7 +94,15 @@ export function Businesses() {
   return (
     <div>
       <div className="row between" style={{ marginBottom: 10 }}>
-        <h1 style={{ margin: 0 }}>Businesses <span className="muted small">({filtered.length})</span></h1>
+        <div>
+          <h1 style={{ margin: 0 }}>Businesses <span className="muted small">({filtered.length})</span></h1>
+          {status === 'active' && ruledOutCount > 0 && (
+            <div className="small muted">
+              {ruledOutCount} ruled-out business{ruledOutCount === 1 ? ' is' : 'es are'} hidden (kept, not deleted) ·{' '}
+              <a href="#" onClick={(e) => { e.preventDefault(); setParam('status', 'ruled_out'); }}>Show ruled out</a>
+            </div>
+          )}
+        </div>
         <div className="row">
           <Link className="btn" to="/import">Import</Link>
           <Link className="btn primary" to="/businesses/new">+ Add</Link>
