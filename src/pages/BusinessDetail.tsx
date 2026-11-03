@@ -9,6 +9,7 @@ import { ActivityLogger } from '../components/ActivityLogger';
 import { BusinessForm, newBusiness } from '../components/BusinessForm';
 import { MapView } from '../components/MapView';
 import { RuleOutModal } from './Businesses';
+import { PlaybookPanel } from '../components/PlaybookPanel';
 
 export function NewBusiness() {
   const { types } = useStore();
@@ -77,6 +78,8 @@ export function BusinessDetail() {
         </div>
       </div>
 
+      <PlaybookPanel key={b.id} b={b} />
+
       <div className="grid two">
         <div>
           <div className="card">
@@ -99,6 +102,7 @@ export function BusinessDetail() {
               {b.email && <><dt className="muted">Email</dt><dd style={{ margin: 0 }}><a href={`mailto:${b.email}`}>{b.email}</a></dd></>}
               {b.website && <><dt className="muted">Website</dt><dd style={{ margin: 0, wordBreak: 'break-all' }}><a href={/^https?:/.test(b.website) ? b.website : `https://${b.website}`} target="_blank" rel="noreferrer">{b.website}</a></dd></>}
               {b.hours && <><dt className="muted">Hours</dt><dd style={{ margin: 0 }}>{b.hours}</dd></>}
+              {b.best_time && <><dt className="muted">Best time</dt><dd style={{ margin: 0 }}>{b.best_time}</dd></>}
               {b.source && <><dt className="muted">Source</dt><dd style={{ margin: 0 }}>{b.source}</dd></>}
               {b.revenue != null && <><dt className="muted">Revenue</dt><dd style={{ margin: 0 }}>{fmtMoney(b.revenue)}</dd></>}
               {b.sde != null && <><dt className="muted">SDE</dt><dd style={{ margin: 0 }}>{fmtMoney(b.sde)}</dd></>}

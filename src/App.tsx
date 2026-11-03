@@ -13,6 +13,7 @@ import { RouteRun } from './pages/RouteRun';
 import { Owners } from './pages/Owners';
 import { SettingsPage } from './pages/Settings';
 import { Login } from './pages/Login';
+import { Playbook } from './pages/Playbook';
 import { Icon, Logo } from './components/Icon';
 import { GlobalSearch } from './components/GlobalSearch';
 import { todayISO } from './lib/util';
@@ -21,6 +22,7 @@ type NavItem = { to: string; label: string; icon: string; end?: boolean };
 const SECTIONS: { title?: string; items: NavItem[] }[] = [
   { items: [{ to: '/', label: 'Today', icon: 'home', end: true }] },
   { items: [{ to: '/businesses', label: 'Businesses', icon: 'building' }, { to: '/owners', label: 'Owners', icon: 'user' }] },
+  { title: 'Outreach', items: [{ to: '/playbook', label: 'Playbook', icon: 'book' }] },
   { title: 'Field work', items: [{ to: '/map', label: 'Map', icon: 'map' }, { to: '/routes', label: 'Routes', icon: 'route' }] },
   { title: 'Data', items: [{ to: '/import', label: 'Import', icon: 'upload' }] },
 ];
@@ -121,6 +123,7 @@ function Shell() {
                 <Route path="/routes" element={<RoutePlanner />} />
                 <Route path="/routes/:id" element={<RouteRun />} />
                 <Route path="/owners" element={<Owners />} />
+                <Route path="/playbook" element={<Playbook />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="*" element={<div className="empty">Page not found.</div>} />
               </Routes>

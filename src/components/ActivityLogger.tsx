@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ACTIVITY_KINDS, OUTCOMES, type Activity, type ActivityKind } from '../lib/types';
 import { useStore } from '../lib/store';
 import { addDaysISO, uid, nowISO } from '../lib/util';
@@ -21,12 +21,25 @@ function localInputValue(d = new Date()) {
 }
 
 /** Logs one activity against one or many businesses (e.g. a postcard campaign). */
-export function ActivityLogger({ businessIds, defaultKind = 'call', onDone, kinds }: { businessIds: string[]; defaultKind?: ActivityKind; onDone?: () => void; kinds?: ActivityKind[] }) {
-  const { logActivities, toast } = useStore();
+export function ActivityLogger({ businessIds, defaultKind = 'call', onDone, kinds, defaultCampaign = '', defaultOutcome = '', aside }: {
+  businessIds: string[];
+  defaultKind?: ActivityKind;
+  onDone?: () => void;
+  kinds?: ActivityKind[];
+  defaultCampaign?: string;
+  defaultOutcome?: string;
+  /** Shown above the form, e.g. the playbook script for this step. */
+  aside?: ReactNode;
+}) {
+  const { logActivities, toast, businesses, owners, saveOwners, saveBusinesses } = useStore();
+  const single = businessIds.length === 1 ? businesses.find((b) => b.id === businessIds[0]) : undefined;
+  const hasOwner = !!single?.owner_id && owners.some((o) => o.id === single.owner_id);
+  const [ownerName, setOwnerName] = useState('');
+  const [bestTime, setBestTime] = useState(single?.best_time ?? '');
   const [kind, setKind] = useState<ActivityKind>(defaultKind);
-  const [outcome, setOutcome] = useState('');
+  const [outcome, setOutcome] = useState(defaultOutcome);
   const [notes, setNotes] = useState('');
-  const [campaign, setCampaign] = useState('');
+  const [campaign, setCampaign] = useState(defaultCampaign);
   const [when, setWhen] = useState(localInputValue());
   const [follow, setFollow] = useState<number | null | undefined | 'custom'>(undefined);
   const [customDate, setCustomDate] = useState('');
@@ -42,6 +55,18 @@ export function ActivityLogger({ businessIds, defaultKind = 'call', onDone, kind
       id: uid(), business_id: id, kind, outcome: outcome || null, notes: notes.trim() || null,
       campaign: campaign.trim() || null, occurred_at: occurred, created_at: nowISO(),
     }));
+    // Capture what the playbook says to write down after each call or visit.
+    if (single && (kind === 'call' || kind === 'door_knock')) {
+      let latest = single;
+      if (!hasOwner && ownerName.trim()) {
+        const ts = nowISO();
+        const o = { id: uid(), name: ownerName.trim(), do_not_contact: false, created_at: ts, updated_at: ts };
+        await saveOwners([o]);
+        latest = { ...latest, owner_id: o.id };
+      }
+      if ((bestTime || '') !== (single.best_time ?? '')) latest = { ...latest, best_time: bestTime.trim() || null };
+      if (latest !== single) await saveBusinesses([latest]);
+    }
     const nextActionDate = follow === undefined ? undefined : follow === null ? null : follow === 'custom' ? customDate || null : addDaysISO(follow);
     try {
       await logActivities(rows, nextActionDate === undefined ? undefined : { nextActionDate, nextActionNote: followNote.trim() || null });
@@ -56,6 +81,7 @@ export function ActivityLogger({ businessIds, defaultKind = 'call', onDone, kind
 
   return (
     <div className="stack">
+      {aside}
       <div className="chips">
         {kindList.map((k) => (
           <button key={k.key} type="button" className={`chip big ${kind === k.key ? 'on' : ''}`} onClick={() => { setKind(k.key); setOutcome(''); }}>
@@ -71,6 +97,18 @@ export function ActivityLogger({ businessIds, defaultKind = 'call', onDone, kind
               <button key={o} type="button" className={`chip ${outcome === o ? 'on' : ''}`} onClick={() => setOutcome(outcome === o ? '' : o)}>{o}</button>
             ))}
           </div>
+        </div>
+      )}
+      {single && (kind === 'call' || kind === 'door_knock') && (
+        <div className="grid form">
+          {!hasOwner && (
+            <Field label="Owner's name (if you learned it)">
+              <input value={ownerName} onChange={(e) => setOwnerName(e.target.value)} placeholder="First and last name, spelled right" />
+            </Field>
+          )}
+          <Field label="Best time to catch the owner">
+            <input value={bestTime} onChange={(e) => setBestTime(e.target.value)} placeholder="e.g. Weekday mornings" />
+          </Field>
         </div>
       )}
       <Field label="Notes">

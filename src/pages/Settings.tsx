@@ -4,6 +4,7 @@ import type { BusinessType, CustomFieldDef } from '../lib/types';
 import { downloadText, nowISO, todayISO, uid } from '../lib/util';
 import { supabase } from '../lib/backend';
 import { geocode } from '../lib/geo';
+import { ProfileForm } from './Playbook';
 import { Field, Modal } from '../components/ui';
 
 export function SettingsPage() {
@@ -58,6 +59,11 @@ export function SettingsPage() {
           {failed.length > 0 && <> · {failed.length} addresses couldn't be found <button className="btn sm" onClick={() => retryGeocoding(failed.map((b) => b.id))}>Retry them</button></>}
           {geocoding.lastError && <> <button className="btn sm" onClick={() => retryGeocoding()}>Retry</button></>}
         </div>
+      </div>
+
+      <div className="card stack" id="details">
+        <h2 style={{ margin: 0 }}>Your details</h2>
+        <ProfileForm />
       </div>
 
       <LandmarksCard />

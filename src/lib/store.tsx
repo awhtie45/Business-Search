@@ -4,6 +4,7 @@ import type { Activity, Business, BusinessType, Landmark, Owner, SavedRoute, Set
 import { nowISO, uid, fullAddress } from './util';
 import { geocode } from './geo';
 import { isPlaceholderOwnerName } from './importer';
+import { afterActivity, afterSave, playbookAppliesTo } from './playbook';
 
 export interface Data {
   types: BusinessType[];
@@ -76,6 +77,11 @@ export function StoreProvider({ backend, children }: { backend: Backend; childre
   const [geoNonce, setGeoNonce] = useState(0);
   const dataRef = useRef(data);
   dataRef.current = data;
+  /** Update state and the ref together, so back-to-back saves always build on the latest data. */
+  const commit = useCallback((fn: (d: Data) => Data) => {
+    dataRef.current = fn(dataRef.current);
+    setData(dataRef.current);
+  }, []);
 
   const toast = useCallback((text: string, kind: Toast['kind'] = 'info') => {
     const id = Date.now() + Math.random();
@@ -137,6 +143,16 @@ export function StoreProvider({ backend, children }: { backend: Backend; childre
         bizList = bizList.map((b) => byId.get(b.id) ?? b);
         ownerList = ownerList.filter((o) => !fake.has(o.id));
       }
+      // Playbook launch: put every active laundromat at Step 1, once.
+      if (!settings.playbook_seeded) {
+        const laundryTypes = new Set(newTypes.filter(playbookAppliesTo).map((t) => t.id));
+        const seeded = bizList.filter((b) => !b.ruled_out && b.playbook_step == null && laundryTypes.has(b.type_id ?? '')).map((b) => ({ ...b, playbook_step: 'find_owner' as const }));
+        if (seeded.length) await backend.upsert('businesses', seeded as never);
+        const byId = new Map(seeded.map((b) => [b.id, b]));
+        bizList = bizList.map((b) => byId.get(b.id) ?? b);
+        settings = { ...settings, playbook_seeded: true };
+        await backend.upsert('settings', [settings as never]).catch(() => undefined);
+      }
       setData({
         types: newTypes.sort((a, b) => a.name.localeCompare(b.name)),
         owners: ownerList,
@@ -158,7 +174,7 @@ export function StoreProvider({ backend, children }: { backend: Backend; childre
 
   const api = useMemo<StoreApi>(() => {
     const upsertLocal = <K extends keyof Data>(key: K, rows: { id: string }[]) =>
-      setData((d) => {
+      commit((d) => {
         const list = d[key] as unknown as { id: string }[];
         const byId = new Map(rows.map((r) => [r.id, r]));
         const merged = list.map((x) => byId.get(x.id) ?? x);
@@ -179,7 +195,7 @@ export function StoreProvider({ backend, children }: { backend: Backend; childre
       retryGeocoding(ids) {
         if (ids?.length) {
           const want = new Set(ids);
-          setData((d) => ({ ...d, businesses: d.businesses.map((b) => (want.has(b.id) ? { ...b, geocode_status: 'pending' } : b)) }));
+          commit((d) => ({ ...d, businesses: d.businesses.map((b) => (want.has(b.id) ? { ...b, geocode_status: 'pending' } : b)) }));
         }
         setGeocoding((g) => ({ ...g, lastError: null }));
         setGeoNonce((n) => n + 1);
@@ -187,7 +203,17 @@ export function StoreProvider({ backend, children }: { backend: Backend; childre
 
       async saveBusinesses(rows) {
         const ts = nowISO();
-        const stamped = rows.map((b) => ({ ...b, updated_at: ts }));
+        const prevById = new Map(dataRef.current.businesses.map((b) => [b.id, b]));
+        const typeById = new Map(dataRef.current.types.map((t) => [t.id, t]));
+        const stamped = rows.map((b) => {
+          const prev = prevById.get(b.id);
+          let next = { ...b, updated_at: ts };
+          // New laundromats start on the outreach playbook.
+          if (!prev && next.playbook_step === undefined && !next.ruled_out && playbookAppliesTo(typeById.get(next.type_id ?? ''))) next.playbook_step = 'find_owner';
+          const patch = afterSave(prev, next);
+          if (patch) next = { ...next, ...patch };
+          return next;
+        });
         upsertLocal('businesses', stamped);
         await persist(() => backend.upsert('businesses', stamped as never));
       },
@@ -195,7 +221,7 @@ export function StoreProvider({ backend, children }: { backend: Backend; childre
       async deleteBusinesses(ids) {
         const drop = new Set(ids);
         const acts = dataRef.current.activities.filter((a) => drop.has(a.business_id)).map((a) => a.id);
-        setData((d) => ({
+        commit((d) => ({
           ...d,
           businesses: d.businesses.filter((b) => !drop.has(b.id)),
           activities: d.activities.filter((a) => !drop.has(a.business_id)),
@@ -220,6 +246,9 @@ export function StoreProvider({ backend, children }: { backend: Backend; childre
             last_activity_at: !b.last_activity_at || b.last_activity_at < a.occurred_at ? a.occurred_at : b.last_activity_at,
             updated_at: ts,
           };
+          // Playbook: logging a touch can move the business to its next step (and schedule it).
+          const pb = afterActivity(updated, a);
+          if (pb) Object.assign(updated, pb);
           if (opts && opts.nextActionDate !== undefined) {
             updated.next_action_date = opts.nextActionDate;
             updated.next_action_note = opts.nextActionNote ?? null;
@@ -237,7 +266,7 @@ export function StoreProvider({ backend, children }: { backend: Backend; childre
       },
 
       async deleteActivity(id) {
-        setData((d) => ({ ...d, activities: d.activities.filter((a) => a.id !== id) }));
+        commit((d) => ({ ...d, activities: d.activities.filter((a) => a.id !== id) }));
         await persist(() => backend.remove('activities', [id]));
       },
 
@@ -250,7 +279,7 @@ export function StoreProvider({ backend, children }: { backend: Backend; childre
 
       async deleteOwner(id) {
         const linked = dataRef.current.businesses.filter((b) => b.owner_id === id).map((b) => ({ ...b, owner_id: null }));
-        setData((d) => ({ ...d, owners: d.owners.filter((o) => o.id !== id) }));
+        commit((d) => ({ ...d, owners: d.owners.filter((o) => o.id !== id) }));
         upsertLocal('businesses', linked);
         await persist(async () => {
           if (linked.length) await backend.upsert('businesses', linked as never);
@@ -265,7 +294,7 @@ export function StoreProvider({ backend, children }: { backend: Backend; childre
 
       async deleteType(id) {
         const linked = dataRef.current.businesses.filter((b) => b.type_id === id).map((b) => ({ ...b, type_id: null }));
-        setData((d) => ({ ...d, types: d.types.filter((t) => t.id !== id) }));
+        commit((d) => ({ ...d, types: d.types.filter((t) => t.id !== id) }));
         upsertLocal('businesses', linked);
         await persist(async () => {
           if (linked.length) await backend.upsert('businesses', linked as never);
@@ -279,16 +308,18 @@ export function StoreProvider({ backend, children }: { backend: Backend; childre
       },
 
       async deleteRoute(id) {
-        setData((d) => ({ ...d, routes: d.routes.filter((r) => r.id !== id) }));
+        commit((d) => ({ ...d, routes: d.routes.filter((r) => r.id !== id) }));
         await persist(() => backend.remove('routes', [id]));
       },
 
       async saveSettings(s) {
-        setData((d) => ({ ...d, settings: s }));
+        commit((d) => ({ ...d, settings: s }));
         await persist(() => backend.upsert('settings', [s as never]));
       },
 
-      async importBatch(owners, businesses) {
+      async importBatch(owners, incoming) {
+        const typeById = new Map(dataRef.current.types.map((t) => [t.id, t]));
+        const businesses = incoming.map((b) => (b.playbook_step === undefined && playbookAppliesTo(typeById.get(b.type_id ?? '')) ? { ...b, playbook_step: 'find_owner' as const } : b));
         upsertLocal('owners', owners);
         upsertLocal('businesses', businesses);
         await persist(async () => {
@@ -297,7 +328,7 @@ export function StoreProvider({ backend, children }: { backend: Backend; childre
         });
       },
     };
-  }, [data, backend, ready, loadError, toasts, toast, geocoding, load, persist]);
+  }, [data, backend, ready, loadError, toasts, toast, geocoding, load, persist, commit]);
 
   // Background geocoder: finds map locations for businesses that have an address but no coordinates.
   const geoRunning = useRef(false);

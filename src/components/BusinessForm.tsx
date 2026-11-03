@@ -95,7 +95,8 @@ export function BusinessForm({ initial, onSaved, onCancel }: { initial: Business
         <Field label="Phone"><input value={b.phone ?? ''} onChange={(e) => set('phone', e.target.value)} type="tel" /></Field>
         <Field label="Email"><input value={b.email ?? ''} onChange={(e) => set('email', e.target.value)} type="email" /></Field>
         <Field label="Website"><input value={b.website ?? ''} onChange={(e) => set('website', e.target.value)} /></Field>
-        <Field label="Hours"><input value={b.hours ?? ''} onChange={(e) => set('hours', e.target.value)} placeholder="e.g. 6am–10pm daily; owner there mornings" /></Field>
+        <Field label="Hours"><input value={b.hours ?? ''} onChange={(e) => set('hours', e.target.value)} placeholder="e.g. 6am–10pm daily" /></Field>
+        <Field label="Best time to catch the owner"><input value={b.best_time ?? ''} onChange={(e) => set('best_time', e.target.value)} placeholder="e.g. Weekday mornings" /></Field>
         <Field label="Source"><input value={b.source ?? ''} onChange={(e) => set('source', e.target.value)} placeholder="Google, ChatGPT list, drive-by…" /></Field>
       </div>
 

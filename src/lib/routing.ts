@@ -12,6 +12,7 @@ export interface EligibilityOptions {
   stages: string[]; // empty = all stages
   cooldownDays: number; // skip if knocked within this many days
   includeContacted: boolean; // false = only businesses never contacted at all
+  playbookSteps?: string[]; // only businesses at these playbook steps
 }
 
 export interface EligibilityContext {
@@ -37,6 +38,7 @@ export function ineligibleReason(b: Business, opts: EligibilityOptions, ctx: Eli
   if (b.stage === 'closed') return 'Closed deal';
   if (opts.typeIds.length && !opts.typeIds.includes(b.type_id ?? '')) return 'Different business type';
   if (opts.stages.length && !opts.stages.includes(b.stage)) return 'Different stage';
+  if (opts.playbookSteps?.length && !opts.playbookSteps.includes(b.playbook_step ?? '')) return 'Different playbook step';
   if (!opts.includeContacted && b.last_activity_at) return 'Already contacted';
   const since = daysSince(ctx.lastKnock.get(b.id));
   if (since != null && since < opts.cooldownDays) return `Knocked ${since} day${since === 1 ? '' : 's'} ago`;

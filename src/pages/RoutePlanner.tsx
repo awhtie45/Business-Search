@@ -28,7 +28,8 @@ export function RoutePlanner() {
   const [name, setName] = useState('');
 
   const ctx = useMemo(() => buildContext(activities, owners), [activities, owners]);
-  const opts = { typeIds, stages, cooldownDays: cooldown, includeContacted };
+  const [onlyVisits, setOnlyVisits] = useState(new URLSearchParams(window.location.search).get('playbook') === 'visit');
+  const opts = { typeIds, stages: onlyVisits ? [] : stages, cooldownDays: cooldown, includeContacted: onlyVisits || includeContacted, playbookSteps: onlyVisits ? ['visit', 'letter2'] : [] };
   const eligible = businesses.filter((b) => !ineligibleReason(b, opts, ctx));
   const noLocation = businesses.filter((b) => !b.ruled_out && b.lat == null).length;
 
@@ -133,6 +134,7 @@ export function RoutePlanner() {
           <div className="chips">
             {STAGES.filter((s) => s.key !== 'closed').map((s) => <button key={s.key} className={`chip ${stages.includes(s.key) ? 'on' : ''}`} onClick={() => setStages(toggle(stages, s.key))}>{s.label}</button>)}
           </div>
+          <label className="check"><input type="checkbox" checked={onlyVisits} onChange={(e) => setOnlyVisits(e.target.checked)} /> Only playbook Step 4 visits (stores waiting for you to stop in)</label>
           <label className="check"><input type="checkbox" checked={includeContacted} onChange={(e) => setIncludeContacted(e.target.checked)} /> Include businesses I've already called/mailed</label>
           <Field label="Skip anything I knocked on in the last … days">
             <input type="number" min={0} value={cooldown} onChange={(e) => setCooldown(Math.max(0, Number(e.target.value) || 0))} />

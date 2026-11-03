@@ -100,6 +100,10 @@ create table if not exists settings (
   created_at timestamptz not null default now()
 );
 alter table settings add column if not exists landmarks jsonb;
+alter table settings add column if not exists profile jsonb;              -- your details for playbook letters/scripts
+alter table settings add column if not exists playbook_seeded boolean;
+alter table businesses add column if not exists playbook_step text;      -- find_owner | scout | letter1 | visit | letter2 | conversation | done
+alter table businesses add column if not exists best_time text;          -- when the owner is usually in
 
 create index if not exists businesses_user_idx on businesses (user_id);
 create index if not exists activities_business_idx on activities (business_id);

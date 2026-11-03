@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom';
 import { useMemo, useState } from 'react';
 import { useStore, useLookups } from '../lib/store';
-import { STAGES, kindInfo } from '../lib/types';
+import { STAGES, kindInfo, type PlaybookStep } from '../lib/types';
+import { STEP_INFO, missingProfile } from '../lib/playbook';
 import { addDaysISO, daysSince, fmtDate, fmtDateTime, fullAddress, todayISO } from '../lib/util';
 import { Empty, StageBadge } from '../components/ui';
 
@@ -60,6 +61,7 @@ export function Today() {
         </div>
       </div>
       <GettingStarted />
+      <PlaybookSummary />
       <div className="grid stats" style={{ marginBottom: 20 }}>
         <div className="stat"><div className="num">{due.length}</div><div className="lbl">Follow-ups due</div></div>
         <div className="stat"><div className="num">{stats.touches7}</div><div className="lbl">Touches this week</div></div>
@@ -197,6 +199,45 @@ function GettingStarted() {
             </div>
             {s === next && <Link className="btn primary" to={s.to}>{s.cta} ›</Link>}
           </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** "Playbook: 18 need owner names · 22 ready for Letter 1 · 6 visits due" */
+function PlaybookSummary() {
+  const { businesses, settings } = useStore();
+  const on = businesses.filter((b) => b.playbook_step && !b.ruled_out);
+  if (!on.length) return null;
+  const today = todayISO();
+  const count = (s: PlaybookStep) => on.filter((b) => b.playbook_step === s).length;
+  const visitsDue = on.filter((b) => (b.playbook_step === 'visit' || b.playbook_step === 'letter2') && b.next_action_date && b.next_action_date <= today).length;
+  const tiles: { step: PlaybookStep; n: number; label: string; due?: string; hot?: boolean }[] = [
+    { step: 'find_owner', n: count('find_owner'), label: 'need an owner name', due: STEP_INFO.find_owner.target },
+    { step: 'scout', n: count('scout'), label: 'to scout (optional)' },
+    { step: 'letter1', n: count('letter1'), label: 'ready for Letter 1', due: STEP_INFO.letter1.target },
+    { step: 'visit', n: count('visit'), label: visitsDue ? `waiting for a visit · ${visitsDue} due now` : 'waiting for a visit', hot: visitsDue > 0 },
+    { step: 'letter2', n: count('letter2'), label: 'need Letter 2' },
+    { step: 'conversation', n: count('conversation'), label: 'talking with you' },
+  ];
+  const missing = missingProfile(settings.profile);
+  return (
+    <div className="card" style={{ marginBottom: 20 }}>
+      <div className="row between">
+        <h2 style={{ margin: 0 }}>Outreach playbook</h2>
+        <Link to="/playbook" className="btn sm">Open playbook</Link>
+      </div>
+      {missing.length > 0 && <div className="alert warn small" style={{ marginTop: 12, marginBottom: 0 }}>Add your details so letters and scripts fill in. <Link to="/playbook#details">Add them →</Link></div>}
+      <div className="grid stats" style={{ marginTop: 14 }}>
+        {tiles.map((t) => (
+          <Link key={t.step} to={`/playbook?step=${t.step}`} className="stat" style={{ color: 'inherit', textDecoration: 'none' }}>
+            <div className="num">{t.n}</div>
+            <div className="lbl" style={t.hot ? { color: 'var(--danger)', fontWeight: 500 } : undefined}>
+              {STEP_INFO[t.step].n ? `Step ${STEP_INFO[t.step].n} · ` : ''}{t.label}
+            </div>
+            {t.due && t.n > 0 && <div className={`small ${t.due < today ? 'pb-overdue' : 'muted'}`} style={{ marginTop: 2 }}>by {fmtDate(t.due)}</div>}
+          </Link>
         ))}
       </div>
     </div>

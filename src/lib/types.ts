@@ -40,6 +40,10 @@ export interface Business {
   email?: string | null;
   website?: string | null;
   hours?: string | null;
+  /** When the owner is usually at the store (asked on every call and visit). */
+  best_time?: string | null;
+  /** Where this business is in the outreach playbook; null = not on the playbook. */
+  playbook_step?: PlaybookStep | null;
   lat?: number | null;
   lng?: number | null;
   geocode_status: GeocodeStatus;
@@ -102,6 +106,20 @@ export interface Settings {
   default_end?: string | null;
   /** Reference points drawn as red dots on every map (home, a school, the office…). */
   landmarks?: Landmark[] | null;
+  /** Your details, filled into playbook scripts and letters. */
+  profile?: Profile | null;
+  playbook_seeded?: boolean | null;
+}
+
+export type PlaybookStep = 'find_owner' | 'scout' | 'letter1' | 'visit' | 'letter2' | 'conversation' | 'done';
+
+export interface Profile {
+  my_name?: string;
+  spouse_name?: string;
+  area?: string;
+  phone?: string;
+  email?: string;
+  financing?: string;
 }
 
 export interface Landmark {
@@ -136,8 +154,8 @@ export const ACTIVITY_KINDS = [
 export type ActivityKind = (typeof ACTIVITY_KINDS)[number]['key'];
 
 export const OUTCOMES: Record<ActivityKind, string[]> = {
-  call: ['No answer', 'Left voicemail', 'Spoke to staff', 'Spoke to owner', 'Wrong number', 'Not interested', 'Call back later', 'Interested'],
-  door_knock: ['Closed / nobody there', 'Spoke to staff', 'Spoke to owner', 'Left card/letter', 'Not interested', 'Come back later', 'Interested'],
+  call: ['No answer', 'Left voicemail', 'Spoke to staff', 'Got owner name', 'Spoke to owner', 'Interested', 'Maybe later', 'Not interested', 'Wrong number', 'Call back later'],
+  door_knock: ['Closed / nobody there', 'Spoke to staff', 'Left card/letter', 'Spoke to owner', 'Interested', 'Maybe later', 'Not interested', 'Come back later'],
   postcard: ['Sent', 'Returned undeliverable'],
   letter: ['Sent', 'Returned undeliverable', 'Got a response'],
   email: ['Sent', 'Replied', 'Bounced'],

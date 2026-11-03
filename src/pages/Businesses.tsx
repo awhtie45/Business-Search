@@ -6,6 +6,8 @@ import { downloadText, fmtDate, fullAddress, toCSV, todayISO } from '../lib/util
 import { splitAddress } from '../lib/importer';
 import { Empty, FollowUpBadge, Field, Modal, StageBadge } from '../components/ui';
 import { ActivityLogger } from '../components/ActivityLogger';
+import { StepBadge } from '../components/PlaybookPanel';
+import { ALL_STEPS, STEP_INFO } from '../lib/playbook';
 
 type SortKey = 'name' | 'last' | 'next' | 'added' | 'city';
 
@@ -22,6 +24,7 @@ export function Businesses() {
   const stage = params.get('stage') ?? '';
   const status = params.get('status') ?? 'active';
   const contact = params.get('contact') ?? '';
+  const pbStep = params.get('step') ?? '';
   const sort = (params.get('sort') as SortKey) ?? 'name';
   const setParam = (k: string, v: string) => {
     const p = new URLSearchParams(params);
@@ -42,6 +45,7 @@ export function Businesses() {
       if (contact === 'contacted' && !b.last_activity_at) return false;
       if (contact === 'due' && !(b.next_action_date && b.next_action_date <= today)) return false;
       if (contact === 'nomap' && b.lat != null) return false;
+      if (pbStep && (pbStep === 'none' ? !!b.playbook_step : b.playbook_step !== pbStep)) return false;
       if (needle) {
         const owner = b.owner_id ? ownerById.get(b.owner_id)?.name : '';
         const hay = [b.name, b.address, b.city, b.state, b.zip, b.phone, owner, b.notes, b.source].join(' ').toLowerCase();
@@ -57,7 +61,7 @@ export function Businesses() {
       added: (a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''),
     };
     return list.sort(cmp[sort] ?? cmp.name);
-  }, [businesses, q, type, stage, status, contact, sort, ownerById]);
+  }, [businesses, q, type, stage, status, contact, sort, ownerById, pbStep]);
 
   const ruledOutCount = businesses.filter((b) => b.ruled_out).length;
   const allSelected = filtered.length > 0 && filtered.every((b) => selected.has(b.id));
@@ -133,6 +137,11 @@ export function Businesses() {
             <option value="due">Follow-up due</option>
             <option value="nomap">Missing map location</option>
           </select>
+          <select value={pbStep} onChange={(e) => setParam('step', e.target.value)}>
+            <option value="">Any playbook step</option>
+            {ALL_STEPS.map((s) => <option key={s} value={s}>{STEP_INFO[s].n ? `Step ${STEP_INFO[s].n}: ${STEP_INFO[s].title}` : STEP_INFO[s].title}</option>)}
+            <option value="none">Not on the playbook</option>
+          </select>
           <select value={sort} onChange={(e) => setParam('sort', e.target.value === 'name' ? '' : e.target.value)}>
             <option value="name">Sort: Name</option>
             <option value="city">Sort: City</option>
@@ -181,7 +190,7 @@ export function Businesses() {
                         </td>
                         <td className="small">{b.address}<div className="muted">{[b.city, b.state].filter(Boolean).join(', ')}</div></td>
                         <td className="small">{b.owner_id ? ownerById.get(b.owner_id)?.name : <span className="muted">—</span>}</td>
-                        <td><StageBadge b={b} />{b.ruled_out && b.rule_out_reason && <div className="small muted">{b.rule_out_reason}</div>}</td>
+                        <td><StageBadge b={b} />{b.playbook_step && !b.ruled_out && <div style={{ marginTop: 4 }}><StepBadge step={b.playbook_step} /></div>}{b.ruled_out && b.rule_out_reason && <div className="small muted">{b.rule_out_reason}</div>}</td>
                         <td className="small nowrap">{last ? <>{kindInfo(last.kind).icon} {fmtDate(last.occurred_at)}<div className="muted">{last.outcome}</div></> : <span className="muted">Never</span>}</td>
                         <td className="small nowrap">{b.next_action_date ? <>{fmtDate(b.next_action_date)} <FollowUpBadge date={b.next_action_date} /></> : ''}</td>
                       </tr>

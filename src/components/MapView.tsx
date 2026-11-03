@@ -7,6 +7,7 @@ import type { Business } from '../lib/types';
 import { kindInfo, stageInfo } from '../lib/types';
 import { fmtDate, fullAddress, todayISO } from '../lib/util';
 import { useLookups, useStore } from '../lib/store';
+import { STEP_INFO } from '../lib/playbook';
 
 export interface NumberedPoint {
   lat: number;
@@ -53,6 +54,8 @@ function BusinessPreview({ b }: { b: Business }) {
       {owner && <div className="mp-line"><span className="mp-k">Owner</span> {owner.name}{owner.do_not_contact ? ' · do not contact' : ''}</div>}
       {(owner?.phone || b.phone) && <div className="mp-line"><span className="mp-k">Phone</span> {owner?.phone || b.phone}</div>}
       {b.hours && <div className="mp-line"><span className="mp-k">Hours</span> {b.hours}</div>}
+      {b.best_time && <div className="mp-line"><span className="mp-k">Best time</span> {b.best_time}</div>}
+      {b.playbook_step && !b.ruled_out && <div className="mp-line"><span className="mp-k">Playbook</span> {STEP_INFO[b.playbook_step].n ? `Step ${STEP_INFO[b.playbook_step].n}: ` : ''}{STEP_INFO[b.playbook_step].title}</div>}
       <div className="mp-line">
         <span className="mp-k">Last touch</span>{' '}
         {last ? `${kindInfo(last.kind).icon} ${fmtDate(last.occurred_at)}${last.outcome ? ` · ${last.outcome}` : ''}` : 'Never contacted'}
