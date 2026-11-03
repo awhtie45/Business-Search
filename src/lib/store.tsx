@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Backend, TableName } from './backend';
-import type { Activity, Business, BusinessType, Owner, SavedRoute, Settings } from './types';
+import type { Activity, Business, BusinessType, Landmark, Owner, SavedRoute, Settings } from './types';
 import { nowISO, uid, fullAddress } from './util';
 import { geocode } from './geo';
 import { isPlaceholderOwnerName } from './importer';
@@ -46,6 +46,8 @@ export function useStore(): StoreApi {
   if (!v) throw new Error('useStore outside StoreProvider');
   return v;
 }
+
+const DEFAULT_LANDMARKS: Landmark[] = [{ id: 'clovis-north-hs', label: 'Clovis North High School', lat: 36.89071, lng: -119.7335 }];
 
 const DEFAULT_SETTINGS: Settings = { id: '', knock_cooldown_days: 30, ors_api_key: null, default_start: null, default_end: null };
 
@@ -112,6 +114,11 @@ export function StoreProvider({ backend, children }: { backend: Backend; childre
       if (!settings) {
         settings = { ...DEFAULT_SETTINGS, id: uid() };
         await backend.upsert('settings', [settings as never]);
+      }
+      // Landmarks were added after launch: give existing installs the starter landmark once.
+      if (settings.landmarks == null) {
+        settings = { ...settings, landmarks: DEFAULT_LANDMARKS };
+        await backend.upsert('settings', [settings as never]).catch(() => undefined);
       }
       if (newTypes.length === 0) {
         const t: BusinessType = { id: uid(), name: 'Laundromat', fields: LAUNDROMAT_FIELDS, created_at: nowISO() };

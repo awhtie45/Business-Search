@@ -157,3 +157,14 @@ tr.dim td { color: var(--muted); }
 .sticky-actions { position: sticky; bottom: 0; background: var(--panel); padding: 10px 0 0; }
 @media (max-width: 760px) { .sticky-actions { bottom: 64px; } }
 .kbd-hint { font-size: 0.75rem; color: var(--muted); }
+
+/* Map hover preview */
+.leaflet-tooltip.map-tooltip { padding: 0; border-radius: 10px; border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18); white-space: normal; }
+.map-preview { width: 260px; padding: 10px 12px; font-family: inherit; font-size: 12.5px; line-height: 1.4; color: var(--text); }
+.map-preview .mp-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+.map-preview .mp-badges { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
+.map-preview .mp-line { margin-top: 2px; }
+.map-preview .mp-k { color: var(--muted); display: inline-block; min-width: 66px; }
+.map-preview .mp-notes { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); color: var(--muted); font-style: italic; }
+.map-preview .mp-hint { margin-top: 6px; font-size: 11px; color: var(--brand-2); }
+@media (hover: none) { .map-preview .mp-hint { display: none; } }

@@ -96,8 +96,10 @@ create table if not exists settings (
   knock_cooldown_days int not null default 30,
   default_start text,
   default_end text,
+  landmarks jsonb,                             -- [{id, label, lat, lng}] red reference dots on maps
   created_at timestamptz not null default now()
 );
+alter table settings add column if not exists landmarks jsonb;
 
 create index if not exists businesses_user_idx on businesses (user_id);
 create index if not exists activities_business_idx on activities (business_id);

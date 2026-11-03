@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useStore } from '../lib/store';
 import type { BusinessType, CustomFieldDef } from '../lib/types';
 import { downloadText, nowISO, todayISO, uid } from '../lib/util';
 import { supabase } from '../lib/backend';
+import { geocode } from '../lib/geo';
 import { Field, Modal } from '../components/ui';
 
 export function SettingsPage() {
@@ -58,6 +59,8 @@ export function SettingsPage() {
           {geocoding.lastError && <> <button className="btn sm" onClick={() => retryGeocoding()}>Retry</button></>}
         </div>
       </div>
+
+      <LandmarksCard />
 
       <div className="card stack">
         <div className="row between"><h2 style={{ margin: 0 }}>Business types</h2><button className="btn sm" onClick={() => setEditing({ id: uid(), name: '', fields: [], created_at: nowISO() })}>+ Add type</button></div>
@@ -125,5 +128,51 @@ function TypeModal({ type, onClose, onSave, onDelete }: { type: BusinessType; on
         </div>
       </div>
     </Modal>
+  );
+}
+
+function LandmarksCard() {
+  const { settings, saveSettings, toast } = useStore();
+  const [label, setLabel] = useState('');
+  const [where, setWhere] = useState('');
+  const [busy, setBusy] = useState(false);
+  const landmarks = settings.landmarks ?? [];
+  useEffect(() => {
+    if (window.location.hash === '#landmarks') document.getElementById('landmarks')?.scrollIntoView({ behavior: 'smooth' });
+  }, []);
+
+  async function add() {
+    setBusy(true);
+    try {
+      const r = await geocode(where || label, settings.ors_api_key);
+      if (!r) throw new Error("Couldn't find that place. Try a full street address, or paste coordinates like 36.8907, -119.7335 (in Google Maps, right-click a spot to copy them).");
+      await saveSettings({ ...settings, landmarks: [...landmarks, { id: uid(), label: label.trim() || where.trim(), lat: r.lat, lng: r.lng }] });
+      setLabel('');
+      setWhere('');
+      toast('Landmark added');
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card stack" id="landmarks">
+      <h2 style={{ margin: 0 }}>Map landmarks</h2>
+      <p className="small muted">Bright red dots on every map to help you get your bearings, such as home, a school or the office.</p>
+      {landmarks.length === 0 && <p className="small muted">No landmarks.</p>}
+      {landmarks.map((l) => (
+        <div key={l.id} className="row between" style={{ borderTop: '1px solid var(--line)', paddingTop: 8 }}>
+          <span><span className="dot" style={{ background: '#ff1a1a', width: 12, height: 12 }} /> <strong>{l.label}</strong> <span className="small muted">{l.lat.toFixed(5)}, {l.lng.toFixed(5)}</span></span>
+          <button className="btn sm" onClick={() => saveSettings({ ...settings, landmarks: landmarks.filter((x) => x.id !== l.id) })}>Remove</button>
+        </div>
+      ))}
+      <div className="grid form">
+        <Field label="Name"><input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Home" /></Field>
+        <Field label="Address or lat, lng"><input value={where} onChange={(e) => setWhere(e.target.value)} placeholder="2770 E International Ave, Fresno, CA" /></Field>
+      </div>
+      <div><button className="btn" disabled={busy || !(label.trim() || where.trim())} onClick={add}>{busy ? 'Finding…' : '+ Add landmark'}</button></div>
+    </div>
   );
 }

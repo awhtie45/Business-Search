@@ -100,6 +100,15 @@ export interface Settings {
   knock_cooldown_days: number;
   default_start?: string | null;
   default_end?: string | null;
+  /** Reference points drawn as red dots on every map (home, a school, the office…). */
+  landmarks?: Landmark[] | null;
+}
+
+export interface Landmark {
+  id: ID;
+  label: string;
+  lat: number;
+  lng: number;
 }
 
 export const STAGES = [
