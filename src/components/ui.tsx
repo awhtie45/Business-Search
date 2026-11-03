@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { stageInfo, type Business } from '../lib/types';
 import { useStore } from '../lib/store';
 import { todayISO } from '../lib/util';
@@ -64,4 +64,36 @@ export function Field({ label, children, className }: { label: string; children:
 
 export function Empty({ children }: { children: ReactNode }) {
   return <div className="empty">{children}</div>;
+}
+
+export interface MenuItem {
+  label: string;
+  onClick?: () => void;
+  href?: string;
+  danger?: boolean;
+  hidden?: boolean;
+}
+
+/** A small dropdown menu (e.g. "Actions ▾"). */
+export function Menu({ trigger, items, align = 'right', className = '' }: { trigger: ReactNode; items: MenuItem[]; align?: 'left' | 'right'; className?: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+  return (
+    <div className={`menu ${className}`} ref={ref}>
+      <button type="button" className="menu-trigger" onClick={() => setOpen(!open)} aria-expanded={open}>{trigger}</button>
+      {open && (
+        <div className={`menu-list ${align}`}>
+          {items.filter((i) => !i.hidden).map((i) => i.href
+            ? <a key={i.label} className={`menu-item ${i.danger ? 'danger' : ''}`} href={i.href} target="_blank" rel="noreferrer" onClick={() => setOpen(false)}>{i.label}</a>
+            : <button key={i.label} type="button" className={`menu-item ${i.danger ? 'danger' : ''}`} onClick={() => { setOpen(false); i.onClick?.(); }}>{i.label}</button>)}
+        </div>
+      )}
+    </div>
+  );
 }
