@@ -70,7 +70,7 @@ export function BusinessForm({ initial, onSaved, onCancel }: { initial: Business
         )}
         <Field label="Business type">
           <select value={b.type_id ?? ''} onChange={(e) => set('type_id', e.target.value || null)}>
-            <option value="">—</option>
+            <option value="">No type</option>
             {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </Field>
