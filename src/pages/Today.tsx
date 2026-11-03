@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useStore, useLookups } from '../lib/store';
 import { STAGES, kindInfo } from '../lib/types';
 import { addDaysISO, daysSince, fmtDate, fmtDateTime, fullAddress, todayISO } from '../lib/util';
@@ -30,17 +30,16 @@ export function Today() {
   const recent = [...activities].sort((a, b) => b.occurred_at.localeCompare(a.occurred_at)).slice(0, 8);
   const bizById = new Map(businesses.map((b) => [b.id, b]));
 
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+
   if (businesses.length === 0) {
     return (
-      <div className="card">
-        <h1>Welcome 👋</h1>
-        <p>Start by adding the businesses you're looking at. You can:</p>
-        <div className="row" style={{ marginTop: 12 }}>
-          <Link className="btn primary" to="/import">Import a list (Excel, CSV, Google Sheet, or paste from ChatGPT/Claude)</Link>
-          <Link className="btn" to="/businesses/new">Add one manually</Link>
-        </div>
+      <div>
+        <div className="page-head"><div><h1>Welcome 👋</h1><div className="page-sub">Let's set up your business search.</div></div></div>
+        <GettingStarted />
         {backend.mode === 'local' && (
-          <p className="small muted" style={{ marginTop: 14 }}>You're in local mode: data is saved in this browser only. See the README to connect a free Supabase database so your phone and laptop stay in sync.</p>
+          <p className="small muted">Your data is saved in this browser only. Use Settings → Download backup now and then.</p>
         )}
       </div>
     );
@@ -48,8 +47,20 @@ export function Today() {
 
   return (
     <div>
-      <h1>Today</h1>
-      <div className="grid stats" style={{ marginBottom: 14 }}>
+      <div className="page-head">
+        <div>
+          <h1>{greeting}</h1>
+          <div className="page-sub">
+            {due.length ? `You have ${due.length} follow-up${due.length === 1 ? '' : 's'} due.` : 'No follow-ups due today.'} {neverContacted > 0 && `${neverContacted} ${neverContacted === 1 ? "business hasn't" : "businesses haven't"} been contacted yet.`}
+          </div>
+        </div>
+        <div className="row">
+          <Link className="btn" to="/import">Import</Link>
+          <Link className="btn primary" to="/businesses/new">+ Add business</Link>
+        </div>
+      </div>
+      <GettingStarted />
+      <div className="grid stats" style={{ marginBottom: 20 }}>
         <div className="stat"><div className="num">{due.length}</div><div className="lbl">Follow-ups due</div></div>
         <div className="stat"><div className="num">{stats.touches7}</div><div className="lbl">Touches this week</div></div>
         <div className="stat"><div className="num">{stats.touches30}</div><div className="lbl">Touches, last 30 days</div></div>
@@ -140,6 +151,53 @@ export function Today() {
             })}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Checklist in the spirit of an onboarding guide; ticks itself off as you use the app. */
+function GettingStarted() {
+  const { businesses, owners, activities, routes } = useStore();
+  const [hidden, setHidden] = useState(() => {
+    try { return localStorage.getItem('bizsearch:ui:hideStart') === '1'; } catch { return false; }
+  });
+  const steps = [
+    { done: businesses.length > 0, title: 'Add your first businesses', text: 'Import a list from Excel, a Google Sheet, or paste one from ChatGPT or Claude.', to: '/import', cta: 'Import a list' },
+    { done: owners.length > 0, title: 'Add owner names', text: 'Linking owners means one conversation covers all their locations.', to: '/owners', cta: 'Add owners' },
+    { done: activities.length > 0, title: 'Log your first outreach', text: 'Record a call, postcard, letter or door knock and how it went.', to: '/businesses', cta: 'Open businesses' },
+    { done: businesses.some((b) => b.next_action_date), title: 'Schedule a follow-up', text: 'Follow-ups land on this page the day they are due.', to: '/businesses', cta: 'Pick a business' },
+    { done: businesses.some((b) => b.ruled_out), title: "Rule out one that's not a fit", text: 'Keeps it off your list and out of future imports, without deleting it.', to: '/businesses', cta: 'Review list' },
+    { done: routes.length > 0, title: 'Plan a door-knock route', text: 'Pick a start, an end and how many stops. Optional for now.', to: '/routes', cta: 'Plan a route' },
+  ];
+  const doneCount = steps.filter((s) => s.done).length;
+  const pct = Math.round((doneCount / steps.length) * 100);
+  if (hidden || doneCount === steps.length) return null;
+  const next = steps.find((s) => !s.done);
+  return (
+    <div className="grid onboarding" style={{ marginBottom: 20 }}>
+      <div className="card" style={{ marginBottom: 0 }}>
+        <div className="row between">
+          <h2 style={{ margin: 0 }}>🔥 Your setup progress</h2>
+          <button className="btn sm" onClick={() => { setHidden(true); try { localStorage.setItem('bizsearch:ui:hideStart', '1'); } catch { /* ignore */ } }}>Hide</button>
+        </div>
+        <div className="row" style={{ marginTop: 14, flexWrap: 'nowrap' }}>
+          <div className="progress grow"><div style={{ width: `${Math.max(pct, 4)}%` }} /></div>
+          <strong style={{ minWidth: 44, textAlign: 'right' }}>{pct}%</strong>
+        </div>
+      </div>
+      <div className="card" style={{ marginBottom: 0 }}>
+        <h2>Recommended: everything you need to get started</h2>
+        {steps.map((s) => (
+          <div key={s.title} className={`step ${s.done ? 'done' : ''}`}>
+            <span className="step-check">{s.done ? '✓' : ''}</span>
+            <div className="grow">
+              <Link to={s.to} className="step-title">{s.title}</Link>
+              <div className="small muted">{s.text}</div>
+            </div>
+            {s === next && <Link className="btn primary" to={s.to}>{s.cta} ›</Link>}
+          </div>
+        ))}
       </div>
     </div>
   );
