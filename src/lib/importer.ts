@@ -33,7 +33,7 @@ export const TARGETS = [
 export type TargetKey = (typeof TARGETS)[number]['key'];
 
 const SYNONYMS: [TargetKey, RegExp][] = [
-  ['owner_name', /^(owner|owner name|owners?|proprietor|contact|contact name|principal|registered agent)$/],
+  ['owner_name', /^(owner|owner name|owners?|proprietor|contact|contact name|principal|registered agent|recipient|recipient name|addressee|mail to|attn|attention)$/],
   ['owner_phone', /^(owner phone|owner cell|contact phone|cell|mobile)$/],
   ['owner_email', /^(owner email|contact email)$/],
   ['owner_mailing', /^(owner (mailing )?address|mailing address|owner address)$/],
@@ -83,6 +83,19 @@ const clean = (s: unknown) =>
     .replace(/\*\*/g, '') // markdown bold from AI chat output
     .replace(/^\[(.*)\]\(.*\)$/, '$1') // markdown links -> text
     .trim();
+
+/** Filler values AI lists and spreadsheets use for "we don't know". */
+const PLACEHOLDER = /^(n\/?a|na|none|null|unknown|not (known|listed|available|found|provided|public(ly)? (listed|available))|unavailable|tbd|tba|\?+|-+|—|–|\.+|x)$/i;
+export function isPlaceholder(v: string): boolean {
+  return PLACEHOLDER.test(v.trim().replace(/[()[\]]/g, '').trim());
+}
+
+/** Owner columns often say just "Owner", "Owner name", "Private" etc. instead of a real name. */
+export function isPlaceholderOwnerName(v: string | null | undefined): boolean {
+  const t = (v ?? '').trim().replace(/[()[\].:]/g, '').trim().toLowerCase();
+  if (!t || isPlaceholder(t)) return true;
+  return /^(the )?(owner|owners|owner name|business owner|proprietor|contact|manager|private|private owner|individual|independent|independently owned|local owner|family owned|privately owned|owner unknown|unknown owner|owner not listed|see website|call for info|corporate|llc|inc)$/.test(t);
+}
 
 function dropEmpty(grid: Grid): Grid {
   return grid.map((r) => r.map(clean)).filter((r) => r.some((c) => c !== ''));
@@ -184,7 +197,7 @@ export function rowsToBusinesses(grid: Grid, mapping: TargetKey[], typeId: strin
     const notes: string[] = [];
     mapping.forEach((target, col) => {
       const v = clean(cells[col]);
-      if (!v || target === 'ignore') return;
+      if (!v || target === 'ignore' || isPlaceholder(v)) return;
       switch (target) {
         case 'extra': b.custom[headers[col] || `Column ${col + 1}`] = v; break;
         case 'full_address': {
@@ -193,7 +206,7 @@ export function rowsToBusinesses(grid: Grid, mapping: TargetKey[], typeId: strin
           else b.address = b.address || v;
           break;
         }
-        case 'owner_name': owner.name = v; break;
+        case 'owner_name': if (!isPlaceholderOwnerName(v)) owner.name = v; break;
         case 'owner_phone': owner.phone = v; break;
         case 'owner_email': owner.email = v; break;
         case 'owner_mailing': owner.mailing_address = v; break;
@@ -210,40 +223,65 @@ export function rowsToBusinesses(grid: Grid, mapping: TargetKey[], typeId: strin
   });
 }
 
-function keysFor(b: Pick<Business, 'name' | 'address' | 'city' | 'zip' | 'phone'>): string[] {
-  const keys: string[] = [];
+interface DupKeys {
+  strong: string[]; // phone and street address: reliable on their own
+  name: string | null; // name + city: only trusted when one side has no street address
+  hasAddr: boolean;
+}
+
+function keysFor(b: Pick<Business, 'name' | 'address' | 'city' | 'zip' | 'phone'>): DupKeys {
+  const strong: string[] = [];
   const phone = normPhone(b.phone);
-  if (phone.length === 10) keys.push('p:' + phone);
+  if (phone.length === 10) strong.push('p:' + phone);
   const addr = normAddress(b.address);
-  if (addr && /\d/.test(addr)) keys.push('a:' + addr + '|' + (b.zip?.slice(0, 5) || normName(b.city)));
+  const hasAddr = !!addr && /\d/.test(addr);
+  if (hasAddr) strong.push('a:' + addr + '|' + (b.zip?.slice(0, 5) || normName(b.city)));
   const name = normName(b.name);
-  if (name && b.city) keys.push('n:' + name + '|' + normName(b.city));
-  return keys;
+  // Chains and multi-location owners share names ("Happy Wash & Dry" on three streets), so a name
+  // match only counts as a duplicate when we can't compare street addresses.
+  return { strong, name: name && b.city ? 'n:' + name + '|' + normName(b.city) : null, hasAddr };
+}
+
+class DupIndex<T> {
+  private strong = new Map<string, T>();
+  private nameAny = new Map<string, T>();
+  private nameNoAddr = new Map<string, T>();
+  add(k: DupKeys, v: T) {
+    for (const s of k.strong) if (!this.strong.has(s)) this.strong.set(s, v);
+    if (k.name) {
+      if (!this.nameAny.has(k.name)) this.nameAny.set(k.name, v);
+      if (!k.hasAddr && !this.nameNoAddr.has(k.name)) this.nameNoAddr.set(k.name, v);
+    }
+  }
+  find(k: DupKeys): T | undefined {
+    for (const s of k.strong) {
+      const m = this.strong.get(s);
+      if (m !== undefined) return m;
+    }
+    if (!k.name) return undefined;
+    return k.hasAddr ? this.nameNoAddr.get(k.name) : this.nameAny.get(k.name);
+  }
 }
 
 /** Flags rows that match an existing business (or an earlier row in the same file). */
 export function detectDuplicates(rows: Omit<ImportRow, 'status'>[], existing: Business[]): ImportRow[] {
-  const index = new Map<string, Business>();
-  for (const b of existing) for (const k of keysFor(b)) if (!index.has(k)) index.set(k, b);
-  const seenInFile = new Map<string, number>();
+  const index = new DupIndex<Business>();
+  for (const b of existing) index.add(keysFor(b), b);
+  const inFile = new DupIndex<number>();
   return rows.map((r) => {
     const b = r.business;
     if (!b.name && !b.address) return { ...r, status: 'invalid', reason: 'No name or address' };
     if (!b.name) b.name = b.address ?? 'Unnamed';
     const keys = keysFor(b);
-    for (const k of keys) {
-      const m = index.get(k);
-      if (m) {
-        return m.ruled_out
-          ? { ...r, status: 'ruled_out', matchId: m.id, matchName: m.name, reason: `Matches ruled-out "${m.name}"${m.rule_out_reason ? ` (${m.rule_out_reason})` : ''}` }
-          : { ...r, status: 'duplicate', matchId: m.id, matchName: m.name, reason: `Already have "${m.name}"` };
-      }
+    const m = index.find(keys);
+    if (m) {
+      return m.ruled_out
+        ? { ...r, status: 'ruled_out', matchId: m.id, matchName: m.name, reason: `Matches ruled-out "${m.name}"${m.rule_out_reason ? ` (${m.rule_out_reason})` : ''}` }
+        : { ...r, status: 'duplicate', matchId: m.id, matchName: m.name, reason: `Already have "${m.name}"` };
     }
-    for (const k of keys) {
-      const prev = seenInFile.get(k);
-      if (prev != null) return { ...r, status: 'duplicate', reason: `Same as row ${prev} in this file` };
-    }
-    for (const k of keys) seenInFile.set(k, r.rowIndex);
+    const prev = inFile.find(keys);
+    if (prev != null) return { ...r, status: 'duplicate', reason: `Same as row ${prev} in this file` };
+    inFile.add(keys, r.rowIndex);
     return { ...r, status: 'new' };
   });
 }

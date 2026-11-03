@@ -136,3 +136,35 @@ describe('routing', () => {
     expect(ineligibleReason(biz({ lat: 1, lng: 1, last_activity_at: recent }), { ...opts, includeContacted: false }, ctx)).toBe('Already contacted');
   });
 });
+
+describe('placeholder owners', () => {
+  it('does not treat filler like "Owner" or "N/A" as a person', async () => {
+    const { isPlaceholderOwnerName } = await import('./importer');
+    for (const v of ['Owner', 'owner name', 'Unknown', 'N/A', '(not listed)', '—', 'Private', 'Not publicly listed']) expect(isPlaceholderOwnerName(v)).toBe(true);
+    for (const v of ['Jane Doe', 'Bob Smith LLC', 'Kim Nguyen']) expect(isPlaceholderOwnerName(v)).toBe(false);
+  });
+  it('imports rows with a placeholder owner as owner-unknown', () => {
+    const rows = rowsToBusinesses([['Name', 'Owner', 'Phone'], ['A', 'Owner', 'N/A'], ['B', 'Jane Doe', '555']], ['name', 'owner_name', 'phone'], null, '');
+    expect(rows[0].owner).toBeNull();
+    expect(rows[0].business.phone).toBeUndefined();
+    expect(rows[1].owner?.name).toBe('Jane Doe');
+  });
+});
+
+describe('chains and multi-location owners', () => {
+  it('does not flag same-name stores at different addresses as duplicates', () => {
+    const grid = [
+      ['Business', 'Street', 'City', 'State', 'ZIP'],
+      ['Happy Wash & Dry', '2341 N West Ave', 'Fresno', 'CA', '93705'],
+      ['Happy Wash & Dry', '4218 E Butler Ave', 'Fresno', 'CA', '93702'],
+      ['Laundry City', '848 E California Ave', 'Fresno', 'CA', '93706'],
+      ['Laundry City Laundromat', '2211 E Belmont Ave', 'Fresno', 'CA', '93701'],
+      ['Happy Wash & Dry', '', 'Fresno', 'CA', ''], // no street: can only compare by name
+    ];
+    const rows = detectDuplicates(rowsToBusinesses(grid, guessMapping(grid[0]), null, ''), []);
+    expect(rows.map((r) => r.status)).toEqual(['new', 'new', 'new', 'new', 'duplicate']);
+  });
+  it('maps a "Recipient" column to the owner', () => {
+    expect(guessMapping(['Recipient', 'Business', 'Street'])).toEqual(['owner_name', 'name', 'address']);
+  });
+});

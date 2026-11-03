@@ -3,6 +3,7 @@ import type { Backend, TableName } from './backend';
 import type { Activity, Business, BusinessType, Owner, SavedRoute, Settings } from './types';
 import { nowISO, uid, fullAddress } from './util';
 import { geocode } from './geo';
+import { isPlaceholderOwnerName } from './importer';
 
 export interface Data {
   types: BusinessType[];
@@ -117,10 +118,22 @@ export function StoreProvider({ backend, children }: { backend: Backend; childre
         await backend.upsert('business_types', [t as never]);
         newTypes.push(t);
       }
+      // Repair: earlier imports could create a fake owner named "Owner"/"Unknown" and link every row to it.
+      let ownerList = owners as unknown as Owner[];
+      let bizList = (businesses as unknown as Business[]).map((b) => ({ ...b, custom: b.custom ?? {} }));
+      const fake = new Set(ownerList.filter((o) => isPlaceholderOwnerName(o.name)).map((o) => o.id));
+      if (fake.size) {
+        const unlinked = bizList.filter((b) => b.owner_id && fake.has(b.owner_id)).map((b) => ({ ...b, owner_id: null }));
+        if (unlinked.length) await backend.upsert('businesses', unlinked as never);
+        await backend.remove('owners', [...fake]);
+        const byId = new Map(unlinked.map((b) => [b.id, b]));
+        bizList = bizList.map((b) => byId.get(b.id) ?? b);
+        ownerList = ownerList.filter((o) => !fake.has(o.id));
+      }
       setData({
         types: newTypes.sort((a, b) => a.name.localeCompare(b.name)),
-        owners: owners as unknown as Owner[],
-        businesses: (businesses as unknown as Business[]).map((b) => ({ ...b, custom: b.custom ?? {} })),
+        owners: ownerList,
+        businesses: bizList,
         activities: activities as unknown as Activity[],
         routes: (routes as unknown as SavedRoute[]).sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? '')),
         settings,
